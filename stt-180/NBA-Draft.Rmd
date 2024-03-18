@@ -1,0 +1,283 @@
+---
+title: "STT180 Final Project"
+author: "Alice Shirley, Ethan Fremder, Jack Upton, Sally Shin"
+date: "2023-04-24"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+    df_print: paged
+---
+
+<style type="text/css">
+/* Title */
+h1.title {
+  color: #000000;
+  font-size:60px;
+  font-weight: bold;
+}
+/* Level 1 header */
+h1 {
+  color: #000000;
+  font-weight: bold;
+}
+/* Level 2 header */
+h2 {
+  color: #000000;
+  font-weight: bold;
+}
+/* Level 4 header */
+h4 {
+  color: #000000;
+  font-weight: bold;
+}
+/* Table of contents */
+.list-group-item.active, .list-group-item.active:focus, .list-group-item.active:hover {
+    z-index: 2;
+    color: #fff;
+    background-color: #3C98E5;
+    border-color: #337ab7;
+}
+/* Navigation pills */
+.nav-pills>li.active>a, .nav-pills>li.active>a:focus, .nav-pills>li.active>a:hover {
+    color: #fff;
+    background-color: #3C98E5;
+}
+</style> 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+# Intro
+The dataset we have chosen to examine the “20 Years of NBA Draft Data Results”. This dataset is licensed from the public domain and is updated yearly. All data is pulled from a player’s college sports-reference statistics page link. Currently, it covers data from 01/01/1990 to 02/21/2022 on the NBA Draft. 
+The NBA Draft is an annual process in which the NBA teams select players from american universities or professional leagues. There are two rounds of drafts. In the first round, players 1-30 are selected, and in the second round players 2-60 are selected. A higher pick number (when you were drafted) is better because it indicates you are a more valuable resource to teams and the sport as a whole. 
+
+The variables contained in this dataset are pick, player name, college, years in the nba, games played, total minutes played in the NBA, total points scored in the NBA, total rebounds in the NBA, total assists recorded in the NBA, field goal -percentage, 3 point percentage, free throw percentage, win share, win share 48, plus-minus value, the value over replacement player, draft year, minutes per game, points per game, rebounds per game, and assists per game.
+
+Three of the factors in this data set are a little confusing. These factors are win-share, value over replacement player, and plus-minus value. Win share is a number assigned to a player based on their offense, defense, and playing time. Essentially, it is a measure of how much a player contributes to a game. A higher win-share value is better. Win-shares 48 scales this value to 48 minutes of game time. Next, the plus-minus value is the net changes in score when a given player is on or off the court. Lastly, the value over replacement player, otherwise known as VORP, is the number of points that a player contributed per 100 team possessions above a replacement level player. 
+
+## Research Questions
+1) Can we predict career length based on player stats?
+2) What qualities of a basketball player’s performance indicate a long career?
+
+Our goal is to investigate the data and come to a conclusion about which factors are most strongly related to the career length of players. We will back it up with plots, linear models, and other evidence. Successful linear modeling will allow us to make predictions about the length of careers of players with certain qualities. 
+We anticipate that there will be a correlation between certain factors such as career length and points per game, and minutes per game, as a lengthy career is indicative of success in the sport.
+
+# Methods
+
+## Packages
+We used features of several different packages to answer our research questions. Plyr, dplyr, and tidyverse were used to clean and organize our data, ggplot2 was used for all data visualization, and MASS was used to generate our models. 
+
+```{r include=FALSE}
+library(plyr) # manipulate data
+library(dplyr) # manipulate data
+library(tidyverse) # manipulate data
+
+library(ggplot2) # visualization
+
+library(MASS) # model generation
+```
+
+## Data Cleaning and Preparation
+Before we could conduct any meaningful analysis, the dataset had to be cleaned and prepared. The first thing we did was use convert the column names to strings that were easier to read (e.g. ‘X3P’ became ‘three.point.pcnt’). Next, we delineated columns that would definitely not be used and dropped them from the dataframe. These included duplicate columns and a column containing a list of url to player stats. From there, we created another dataframe that featured strictly numeric values, and another that contained only the variables we deemed relevant to answering our research question. Null values were dropped from both of these data frames.
+The latter of the two dataframes' content was determined by approaching the problem logically. Since the question posed was how performance indicates career length, the statistics captured over the length of a player’s career seemed irrelevant to any potential conclusion. Thus, career total statistics were dropped in favor of statistics bound by an interval (e.g. total career points scored vs. points scored per game)
+
+```{r}
+df_raw = read.csv("draft-data-20-years.csv")
+```
+
+```{r}
+df = df_raw %>% 
+  plyr::rename(c("X"="id",
+                 "Rk"="rank",
+         "Pk"="pick",
+         "Tm"="team",
+         "Player"="player",
+         "College"="college",
+         "Yrs"="years",
+         "G"="games",
+         "TOTMP"="minutes",
+         "TOTPTS"="points",
+         "TOTTRB"="rebounds",
+         "TOTAST"="assists",
+         "FG."="field.goal.pcnt",
+         "X3P."="three.point.pcnt",
+         "FT."="free.throw.pcnt",
+         "WS"="win.shares",
+         "WS.48"="win.shares.48",
+         "BPM"="plus.minus",
+         "VORP"="value.over.replacement.player",
+         "DraftYr"="draft.year",
+         "MPG"="minutes.per.game",
+         "PPG"="points.per.game",
+         "RPG"="rebounds.per.game",
+         "APG"="assists.per.game"))
+
+# Remove redundant or irrelevant columns
+df = dplyr::select(df, -c(DraftYear, rank, playerurl))
+
+# Create a dataframe of numeric values only
+df.numeric = drop_na(dplyr::select(df, -c(player, college, team, id)))
+
+# Create a dataframe of logically relevant data, get rid of stats that do not take time into account
+df.stats = drop_na(dplyr::select(df, c(years,pick,field.goal.pcnt,three.point.pcnt,free.throw.pcnt,win.shares.48,plus.minus,value.over.replacement.player,minutes.per.game,points.per.game,rebounds.per.game,assists.per.game)))
+```
+
+Full dataframe
+```{r}
+df
+```
+
+Numeric-only dataframe
+```{r}
+df.numeric
+```
+
+Dataframe w/ relevant statistics
+```{r}
+df.stats
+```
+
+## Plotting
+Our strategy for exploring the data through visualization revolved around demonstrating the correlation between each relevant variable in the dataset. We originally used a full correlation matrix plotted as a heatmap, but opted for a more focused bar form, as the relationship between every variable was irrelevant to the project. This visualization might provide a rough idea of what to expect of our models. 
+
+```{r}
+# Correlation bar plot - improved visualization of years to correlation.
+df.no.years = df.stats[!colnames(df.stats)%in%"years"]
+# Invert pick so it can be compared to other correlations in visualiation
+df.no.years = mutate(df.no.years, pick = 60-pick)
+
+names = list()
+corrs = list()
+for (i in 1:length(colnames(df.no.years))){
+  names = append(names, colnames(df.no.years)[i])
+  corrs = append(corrs, cor(df.stats$years,df.no.years[,i]))
+}
+
+corrs = as.numeric(unlist(corrs))
+names=unlist(names)
+cor.df = data.frame(names, corrs)
+
+ggplot(cor.df, aes(x=names, y=corrs)) +
+  geom_bar(stat="identity") +
+  labs(y="Correlation w/ career length",x="Player stat",title="Figure 1: Correlation b/w variables and career length") +
+  coord_flip()
+```
+
+We displayed some of the more prominent correlations with career length as scatter plots with added linear regression lines to further establish the relationship between the two variables. 
+
+```{r}
+# scatter plot graph to show that there is a trend between career length and minutes per game (this is likely because the best players will get the most minutes, these players will also have longer careers because they are better than most other players, even when they get older)
+ggplot(df.numeric, aes(x=minutes.per.game, y=(years)))+geom_point()+geom_smooth(method=lm)+labs(y="Career Length (years)", x="Minutes Per Game", title = "Figure 2: Career length by minutes per game")
+
+# Career length vs vorp
+ggplot(df.numeric, aes(x=value.over.replacement.player, y=(years)))+geom_point()+geom_smooth(method=lm)+labs(y="Career Length (years)", x="VORP", title = "Figure 3: Career Length by value over replacement player")
+
+# scatter plot to show ppg vs career length trends(the nba is a league where if you cant score, you will struggle to stay relevant. The more points you can score in a game, the more likely the franchise will keep you around)
+ggplot(df.numeric, aes(x=points.per.game, y=(years)))+geom_point()+geom_smooth(method=lm)+labs(y="Career Length (years)", x="Points Per Game", title = "Figure 4: Career Length by Ppoints per game")
+
+# boxplot ppg vs career length
+df2 <- filter(df.numeric, years <= 22)
+ggplot(df2, aes(x=factor(years), y=points.per.game)) +geom_boxplot() + labs(x="Career Length(years)", y="Points Per Game", title="Figure 5: Career Length vs points per game") +theme(legend.position = "none") 
+
+df.numeric$rrpg <- as.integer(df.numeric$rebounds.per.game)
+ggplot(df.numeric, aes(x=rrpg, y=(years)))+geom_boxplot(aes(as.factor(rrpg)))+geom_smooth()+labs(y="Career Length (years)", x="Rebounds Per Game", title = "Figure 6: Career length by rebounds per game")
+```
+
+## Modeling
+Armed with a solid understanding of the relationships between the important variables, we could create a linear regression model using the numeric values of the dataset.
+
+```{r}
+# Create linear model with years as the response variable and the various player stats as predictive variables
+full.model = lm(years ~ 
+                  pick + 
+                  field.goal.pcnt + 
+                  three.point.pcnt + 
+                  free.throw.pcnt + 
+                  win.shares.48 + 
+                  plus.minus + 
+                  value.over.replacement.player + 
+                  minutes.per.game + 
+                  points.per.game + 
+                  rebounds.per.game + 
+                  assists.per.game, 
+                df.stats)
+summary(full.model)
+```
+This linear model was subsequently used with stepwise regression to create an optimized linear regression with as few features as possible.
+```{r}
+# Perform stepwise regression to create a more concise model
+step.model <- stepAIC(full.model, direction = "both", trace = FALSE)
+summary(step.model)
+```
+
+To test this model, a fake player was created to determine the confidence interval to which the model could predict their career length based on their performance stats.
+
+```{r}
+test_player <- data.frame(pick=3,value.over.replacement.player=20,rebounds.per.game=5,three.point.pcnt=.3,minutes.per.game=30, assists.per.game=3, win.shares.48=.1,points.per.game=14)
+
+predict(step.model, newdata = test_player, interval = 'confidence',level=0.95)
+```
+
+# Results 
+
+  We investigated correlations to discover the relationship between career length and numerical variables. To do this, we created a correlation chart which would indicate which variables had the strongest relationship with years. From the resulting chart it is clear that the factors with the most correlation to career length are minutes per game, value over replacement player, points per game, and rebounds per game. Figures 2-6 further illustrate these relationships. The varying trends and distributions may be observed to gain further insight into how these variables relate to one another. Next, to completely affirm what we found and find the p-values, we created a full linear model with all the factors used in the correlation chart, and used the summary function. With this understanding of the dataset, we created a linear full model shows us that the factors with the smallest p-value as they relate to years are value over replacement players, minutes per game, and points per game as they have a p-value < 2e^-16. This value is extremely small and certainly smaller than .05, so we can claim that these factors are statistically significant. With a combination of low p-values and high correlation, we can conclude that MPG, PPG, and VORP are the most significant factors in predicting career length. Next, we created a step model to verify this, and determined the most important factors to be pick, VORP, RPG, MPG, APG, PPG, three point percentage, and win shares per 48 minutes of play. The inclusion of MPG, PPG, and VORP in this model confirms to us that these factors are very important.
+
+  Next, we used this stepwise model to predict a confidence interval based on the stepwise regression model. For this model, we wanted to predict with 95 percent confidence the career length of a player drafted at 3rd pick with a VORP of 20, RPG of 5, 3 pt percent of .3, MPG of 30, APG of 3, ws48 of .1, and PPG of 14. The creation of a successful confidence prediction interval allows us to conclude that we can predict the career length of a basketball player based on VORP, RPG, 3 pt percent, MPG, APG, WS48, and PPG. Given these attributes, the model predicts that player's career length will be about 11.6 years. 
+
+# Conclusion
+
+## Summary
+  To review, our research questions were,
+
+1) Can we predict career length based on player stats?
+2) What qualities of a basketball player’s performance indicate a long career? 
+
+  Based on our findings, we can answer both of these questions. To summarize what we found, the creation of a successful confidence prediction interval allows us to say that we can effectively predict the career length of a player. This is based on the factors of VORP, RPG, 3 point percentage, MPG, APG, WS48, and PPG. We were able to predict a player’s career length to 95 percent confidence. 
+  Next, based on the correlation values and p-values, we found that the most important factors indicating a successful career are VORP, PPG, and MPG. These are factors that have a high correlation and a low p-value. There are other factors that have one or the other, but these factors meet both parameters. We can conclude based on the graphs as verification that high MPG, high PPG, and high VORP will indicate a long career for a player. 
+  In terms of our methods, we think a hypothesis test would have worked to solidify our conclusions. Our team did attempt to create a null distribution and perform a hypothesis test, but we were largely unsuccessful. In addition, we could have had more variation to our graphical representations to engage the reader/audience member. 
+
+## Reliability & Validity
+  The residuals of our model fitted with stepwise regression certainly centered around zero, as can be seen in the scatter and density plots below. However, due to the ongoing nature of the data collection (as can be seen by the diagonal cutoff in the scatterplot) it was difficult to make a finely tuned model to predict career length.
+
+```{r}
+# Residual scatterplot
+ggplot(step.model, aes(x = step.model$fitted.values, y = step.model$residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0,color="blue") +
+  labs(title='Residual vs. Fitted Values Plot', x='Fitted Values', y='Residuals')
+
+# Residual density plot
+ggplot(step.model, aes(x=step.model$residuals)) +
+  geom_density(fill="blue", alpha=.2) +
+  geom_line(stat = "density") +
+  labs(x="Residual",y="Density",title="Density plot of residuals")
+```
+
+## Limitations
+  The largest limitation of this project was the lack of data regarding injuries. The health of a player is generally thought to be the most indicative factor of the longevity of their career, meaning we could only look at their individual performance without taking injuries and resources invested by their programs into the physical health of their players into account. Additionally, the dataset lacked information about each player’s position, which heavily lends itself to how long they play due to basketball’s physicality as a sport. Another significant limitation we encountered was the fact that the dataset only contained data from 1990-present. Although 30 years of data seems like it should be enough, since some players drafted early on in the timespan of the data are still playing and others are not, the career lengths attributed to some players are meaningless to our analysis. This is exemplified in the scatter plot below. Since we had no way to account for this when building our models, this may have interfered with the accuracy of our results.
+
+```{r}
+ggplot(df.numeric ,aes(draft.year, years)) +
+  geom_point() +
+  geom_smooth(method='lm') +
+  geom_count() +
+  labs(x="Draft Year",y="Years",title="Draft year vs career length by volume") +
+  guides(fill=guide_legend(title="New Legend Title"))
+```
+
+# References
+
+Naz, M. (2022, December 30). Sky sports' 2023 NBA Draft explained: Trades, first-round picks and lottery winnings. Sky Sports. Retrieved May 1, 2023, from                                 https://www.skysports.com/nba/news/12040/12776816/sky-sports-2023-nba-draft-explained-trades-first-round-picks-and-lottery-winnings 
+
+NBAstuffer. (2021, September 18). WIN SHARE (Ws/48) explained. NBAstuffer. Retrieved May 1, 2023, from https://www.nbastuffer.com/analytics101/win-share/#:~:text=Win%20Share%20is%20a%20measure,to%20distribute%20among%20the%20players.%E2%80%9D 
+
+Wieland, B. (2022, February 22). 20 years of NBA Draft Data. Kaggle. Retrieved May 1, 2023, from https://www.kaggle.com/datasets/benwieland/nba-draft-data 
+
+
+
+
